@@ -1,0 +1,23 @@
+# Local execution outputs and databases
+outputs/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local credentials and configuration
+.env
+.env.*
+credentials*
+secrets*
+*.pem
+*.key
+config.local.json
