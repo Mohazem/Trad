@@ -2,6 +2,8 @@
 
 Version 0.2.0, Python 3.11+. Simulation et rejeu : bibliothèque standard uniquement. Adaptateur API LLM optionnel : client SDK fourni par un environnement autorisé.
 
+**Branche expérimentale :** une intégration Paper ponctuelle séparée est décrite dans [PAPER_README.md](PAPER_README.md). Elle conserve les commandes ci-dessous hors ligne. Les lectures authentifiées Paper et marché ont été vérifiées séparément; les écritures restent testées avec des doubles, sans ordre distant. Le mode par défaut est en lecture seule; toute reprise du journal est limitée au rapprochement et les modes d'ordres récurrents/sans surveillance sont interdits. Aucun service continu de trading n'est lancé.
+
 **Cette version associe le simulateur déterministe à une couche consultative IA à trois rôles. Trois réponses réellement produites par des modèles pendant un test ponctuel sont enregistrées et rejouables; leur synthèse s’abstient. Le programme Python n’a pas encore authentifié ni appelé une API LLM distante. Aucun service autonome continu ni connexion courtier n’est déployé. Voir [AI_README.md](AI_README.md) pour l’état exact et les commandes.**
 
 ## Ce qui fonctionne
@@ -63,7 +65,7 @@ Les montants sont enregistrés en chaînes décimales, avec un contexte de calcu
 ## Limites importantes
 
 - Les noms ResearchAgent, SignalAgent, CriticAgent et RiskAgent du simulateur de base décrivent des règles déterministes. La couche IA distincte dispose de trois rôles consultatifs et d’un adaptateur OpenAI, testé avec un double de client. Le rejeu inclus contient de vraies réponses de modèles enregistrées, mais ne réalise pas de nouvelle inférence. Aucune connexion API LLM authentifiée n’a été validée par le programme Python.
-- **Aucune connexion Alpaca**, aucune authentification, aucune lecture de compte, aucun ordre Paper distant, aucun ordre réel. `prepare_payload` ne prouve pas qu'un courtier accepterait un ordre : pas de vérification des pas de cotation, fractions disponibles ou règles de titre.
+- **Le simulateur et le squelette historiques n'effectuent aucune connexion Alpaca**, aucune authentification, aucune lecture de compte, aucun ordre Paper distant, aucun ordre réel. Leur `prepare_payload` ne prouve pas qu'un courtier accepterait un ordre. L'intégration ponctuelle expérimentale et ses garde-fous sont séparés dans [PAPER_README.md](PAPER_README.md).
 - Le simulateur emploie des prix avec glissement; le dictionnaire Alpaca illustratif décrit un ordre limite au prix de référence. Ce sont deux mécanismes distincts sans garantie d'équivalence.
 - Les étiquettes intraday/swing correspondent uniquement à deux fenêtres de calcul (3 et 8 pas). Pas de clôture forcée de séance, jours fériés, horaires réels ou gestion robuste de positions sur plusieurs jours. Les cotations horaires inventées existent même hors séance.
 - Pas de forex, actualités, données historiques réelles, dividendes, splits, taxes, borrow fees, spread variable, carnet d'ordres, liquidité, latence, remplissage partiel, ordre en attente ou réconciliation courtier.
