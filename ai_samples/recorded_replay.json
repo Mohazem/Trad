@@ -1,0 +1,112 @@
+{
+  "format_version": 1,
+  "provenance": "recorded_llm",
+  "packet": {
+    "packet_id": "synthetic-ai-20261013-140000",
+    "asof": "2026-10-13T14:00:00+00:00",
+    "data_kind": "synthetic",
+    "sources": [
+      {
+        "source_id": "aapl-quote",
+        "symbol": "AAPL",
+        "kind": "quote",
+        "asof": "2026-10-13T14:00:00+00:00",
+        "values": {
+          "price": "100.00"
+        }
+      },
+      {
+        "source_id": "aapl-summary",
+        "symbol": "AAPL",
+        "kind": "summary",
+        "asof": "2026-10-13T14:00:00+00:00",
+        "values": {
+          "samples": 9,
+          "momentum": "0.025",
+          "max_step": "0.009"
+        }
+      },
+      {
+        "source_id": "msft-quote",
+        "symbol": "MSFT",
+        "kind": "quote",
+        "asof": "2026-10-13T14:00:00+00:00",
+        "values": {
+          "price": "200.00"
+        }
+      },
+      {
+        "source_id": "msft-summary",
+        "symbol": "MSFT",
+        "kind": "summary",
+        "asof": "2026-10-13T14:00:00+00:00",
+        "values": {
+          "samples": 9,
+          "momentum": "-0.005",
+          "max_step": "0.008"
+        }
+      },
+      {
+        "source_id": "btc-quote",
+        "symbol": "BTC/USD",
+        "kind": "quote",
+        "asof": "2026-10-13T14:00:00+00:00",
+        "values": {
+          "price": "50000.00"
+        }
+      },
+      {
+        "source_id": "btc-summary",
+        "symbol": "BTC/USD",
+        "kind": "summary",
+        "asof": "2026-10-13T14:00:00+00:00",
+        "values": {
+          "samples": 9,
+          "momentum": "0.04",
+          "max_step": "0.035"
+        }
+      }
+    ]
+  },
+  "responses": {
+    "analyst": {
+      "role": "analyst",
+      "packet_id": "synthetic-ai-20261013-140000",
+      "evidence_ids": [
+        "aapl-summary",
+        "msft-summary",
+        "btc-summary"
+      ],
+      "symbol": "AAPL",
+      "bias": "bullish",
+      "confidence": 0.58,
+      "rationale": "Dans ce seul scénario synthétique, AAPL présente un momentum positif de 0,025 sur 9 observations, contre -0,005 pour MSFT. Son max_step de 0,009 est inférieur à celui de BTC/USD (0,035), dont le momentum atteint 0,04. Ces résumés motivent un biais haussier prudent pour AAPL, sans établir une tendance durable ni une rentabilité future. L'horizon, la série détaillée, les volumes et les coûts sont absents. La confiance de 0,58 exprime une appréciation subjective des éléments fournis, pas une probabilité de gain."
+    },
+    "critic": {
+      "role": "critic",
+      "packet_id": "synthetic-ai-20261013-140000",
+      "evidence_ids": [
+        "aapl-summary",
+        "msft-summary",
+        "btc-summary"
+      ],
+      "verdict": "accept",
+      "concerns": [
+        "Les comparaisons chiffrées sont fidèles au paquet synthétique et le biais haussier est présenté avec prudence. L'acceptation permet seulement de poursuivre l'évaluation dans cette simulation ; elle ne suffit pas à justifier un achat.",
+        "Neuf observations, sans horizon ni série détaillée, ne permettent pas d'établir la persistance du momentum. Le max_step inférieur à celui de BTC/USD ne démontre pas un risque global inférieur ; celui de MSFT est même légèrement plus faible.",
+        "Les volumes, les coûts et les conditions d'exécution manquent. La confiance de 0,58 reste subjective et non calibrée ; l'abstention doit rester possible lors de la synthèse."
+      ]
+    },
+    "synthesizer": {
+      "role": "synthesizer",
+      "packet_id": "synthetic-ai-20261013-140000",
+      "evidence_ids": [
+        "aapl-summary"
+      ],
+      "symbol": "AAPL",
+      "action": "abstain",
+      "confidence": 0.78,
+      "rationale": "Le momentum synthétique positif d’AAPL (0,025 sur 9 observations) soutient le biais haussier prudent de l’analyste, mais ne suffit pas à justifier un achat. Le critique accepte la cohérence de l’analyse tout en signalant l’absence d’horizon, de série détaillée, de volumes et de coûts. Faute d’éléments permettant d’évaluer la persistance du signal et les conditions d’exécution, je retiens l’abstention. La confiance de 0,78 exprime une appréciation subjective de cette décision dans ce scénario inventé, pas une probabilité de gain ni une performance attendue."
+    }
+  }
+}

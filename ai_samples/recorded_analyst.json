@@ -1,0 +1,13 @@
+{
+  "role": "analyst",
+  "packet_id": "synthetic-ai-20261013-140000",
+  "evidence_ids": [
+    "aapl-summary",
+    "msft-summary",
+    "btc-summary"
+  ],
+  "symbol": "AAPL",
+  "bias": "bullish",
+  "confidence": 0.58,
+  "rationale": "Dans ce seul scénario synthétique, AAPL présente un momentum positif de 0,025 sur 9 observations, contre -0,005 pour MSFT. Son max_step de 0,009 est inférieur à celui de BTC/USD (0,035), dont le momentum atteint 0,04. Ces résumés motivent un biais haussier prudent pour AAPL, sans établir une tendance durable ni une rentabilité future. L'horizon, la série détaillée, les volumes et les coûts sont absents. La confiance de 0,58 exprime une appréciation subjective des éléments fournis, pas une probabilité de gain."
+}

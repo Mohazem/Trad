@@ -1,0 +1,11 @@
+{
+  "role": "synthesizer",
+  "packet_id": "synthetic-ai-20261013-140000",
+  "evidence_ids": [
+    "aapl-summary"
+  ],
+  "symbol": "AAPL",
+  "action": "abstain",
+  "confidence": 0.78,
+  "rationale": "Le momentum synthétique positif d’AAPL (0,025 sur 9 observations) soutient le biais haussier prudent de l’analyste, mais ne suffit pas à justifier un achat. Le critique accepte la cohérence de l’analyse tout en signalant l’absence d’horizon, de série détaillée, de volumes et de coûts. Faute d’éléments permettant d’évaluer la persistance du signal et les conditions d’exécution, je retiens l’abstention. La confiance de 0,78 exprime une appréciation subjective de cette décision dans ce scénario inventé, pas une probabilité de gain ni une performance attendue."
+}
