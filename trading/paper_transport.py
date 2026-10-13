@@ -20,6 +20,20 @@ PAPER = "https://paper-api.alpaca.markets"
 DATA = "https://data.alpaca.markets"
 SECRET_NAMES = ("ALPACA_PAPER_KEY", "ALPACA_PAPER_SECRET_")
 MAX_BYTES = 1024 * 1024
+MAX_ERROR_BYTES = 4096
+# Deliberately narrow documented examples, not inferred code ranges. See the
+# official source links in PAPER_README.md. Unknown codes are omitted.
+PROVIDER_ERROR_CODES = {403: frozenset({40310000}), 422: frozenset({42210000})}
+
+
+def safe_request_id(value):
+    # Alpaca documents a 32-hex X-Request-ID. No whitespace, URLs, prose,
+    # alternate headers or loosely shaped tokens are retained.
+    return value if type(value) is str and re.fullmatch(r"[0-9a-fA-F]{32}", value) else None
+
+
+def safe_provider_code(status, value):
+    return value if type(value) is int and value in PROVIDER_ERROR_CODES.get(status, ()) else None
 
 
 def unique_object(pairs):
@@ -32,10 +46,58 @@ def unique_object(pairs):
 
 
 class PaperError(RuntimeError):
-    """Only a fixed, non-sensitive code and optional HTTP status escape."""
-    def __init__(self, code, status=None):
+    """Fixed local code plus a small validated HTTP diagnostic projection."""
+    def __init__(self, code, status=None, *, request_id=None, provider_error_code=None):
         super().__init__(code)
-        self.code, self.status = code, status
+        self.code = code
+        self.status = status if type(status) is int and 100 <= status <= 599 else None
+        self.request_id = safe_request_id(request_id)
+        self.provider_error_code = safe_provider_code(self.status, provider_error_code)
+
+    def safe_details(self):
+        result = {"code": self.code, "http_status": self.status}
+        if self.request_id is not None:
+            result["request_id"] = self.request_id
+        if self.provider_error_code is not None:
+            result["provider_error_code"] = self.provider_error_code
+        return result
+
+
+def http_error_details(error, sensitive_values=()):
+    """Read a bounded error inside the request deadline; retain no raw text.
+
+    Response headers/body are untrusted. Even an accepted ID/code cannot prove
+    whether the provider or proxy produced the response. Only a small projection
+    leaves this function; errors while extracting diagnostics are ignored.
+    """
+    request_id = provider_code = None
+    try:
+        ids = error.headers.get_all("X-Request-ID", [])
+        if len(ids) == 1:
+            request_id = safe_request_id(ids[0])
+    except Exception:
+        pass
+    try:
+        content_type = error.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        encoding = error.headers.get("Content-Encoding", "identity").lower()
+        if content_type == "application/json" and encoding == "identity":
+            raw = error.read(MAX_ERROR_BYTES + 1)
+            if len(raw) <= MAX_ERROR_BYTES:
+                value = json.loads(raw, object_pairs_hook=unique_object,
+                                   parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                if isinstance(value, dict):
+                    provider_code = safe_provider_code(error.code, value.get("code"))
+    except Exception:
+        pass
+    # Reject reflected values already supplied to this request. In production
+    # these are protected placeholders; the proxy owns the actual credentials.
+    for value in sensitive_values:
+        if type(value) is str and value:
+            if request_id is not None and value.casefold() in request_id.casefold():
+                request_id = None
+            if provider_code is not None and value in str(provider_code):
+                provider_code = None
+    return {"request_id": request_id, "provider_error_code": provider_code}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -157,20 +219,29 @@ class ProtectedTransport:
             with deadline():
                 if before_send is not None:
                     before_send()
-                with opener.open(request, timeout=10) as response:
-                    if response.status == 204:
-                        return None
-                    if response.status != 200:
-                        raise PaperError("unexpected_http_status", response.status)
-                    data = response.read(MAX_BYTES + 1)
-                    if len(data) > MAX_BYTES:
-                        raise PaperError("response_size_limit")
-                    return json.loads(data, parse_float=str, object_pairs_hook=unique_object,
-                                      parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-        except urllib.error.HTTPError as exc:
-            status = exc.code
-            exc.close()
-            raise PaperError("http_error", status) from None
+                failure = None
+                try:
+                    with opener.open(request, timeout=10) as response:
+                        if response.status == 204:
+                            return None
+                        if response.status != 200:
+                            raise PaperError("unexpected_http_status", response.status)
+                        data = response.read(MAX_BYTES + 1)
+                        if len(data) > MAX_BYTES:
+                            raise PaperError("response_size_limit")
+                        return json.loads(data, parse_float=str, object_pairs_hook=unique_object,
+                                          parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                except urllib.error.HTTPError as exc:
+                    details = http_error_details(exc, (headers["APCA-API-KEY-ID"], headers["APCA-API-SECRET-KEY"]))
+                    failure = PaperError("http_error", exc.code, **details)
+                    try:
+                        exc.close()
+                    except Exception:
+                        pass
+                # Raise outside the HTTPError handler: do not attach the raw
+                # response exception (headers/body/URL) as exception context.
+                if failure is not None:
+                    raise failure from None
         except PaperError:
             raise
         except Exception:

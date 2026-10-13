@@ -24,7 +24,42 @@ Alpaca via le proxy HTTPS déjà configuré. Aucun secret dans une URL, un fichi
 ou un journal. Il refuse le contournement du proxy, les hôtes non autorisés,
 les redirections et le mode live. Vérification TLS/nom d'hôte active, aucune
 nouvelle tentative automatique, délai socket 10 s, délai total 20 s par requête,
-réponse limitée à 1 Mio. Les erreurs publiées sont des codes génériques.
+réponse limitée à 1 Mio. Les erreurs exposent uniquement les champs validés
+décrits ci-dessous, jamais le texte brut de la réponse.
+
+### Diagnostic HTTP limité pour les erreurs futures
+
+`PaperError.safe_details()` conserve le code local fixe et le statut HTTP
+entier (100–599). Les seuls champs optionnels sont :
+
+- `request_id` : un unique en-tête `X-Request-ID` contenant exactement 32
+  caractères hexadécimaux ASCII. Un doublon, un format différent ou une valeur
+  reflétant un placeholder fourni à la requête est omis.
+- `provider_error_code` : uniquement les entiers documentés `40310000` avec
+  HTTP 403 et `42210000` avec HTTP 422. Les codes inconnus, chaînes, flottants,
+  doublons JSON ou correspondances de statut incohérentes sont omis.
+
+Le transport examine au plus 4 097 octets du corps d'erreur, dans le délai total
+de la requête. Le code fournisseur n'est extrait que d'un objet JSON complet
+d'au plus 4 096 octets, de type `application/json` et sans compression.
+Tout message libre, corps de requête, URL renvoyée, cookie ou autre en-tête est
+écarté; aucune copie de la réponse brute n'est conservée dans l'erreur propagée.
+La CLI expose cette projection. Les résultats de soumission/rapprochement
+préservent séparément `submission_error`, `reconciliation_error` ou
+`cancellation_error` lorsque disponibles. Les journaux privés existants ne sont
+ni réécrits ni réarmés. Aucun nouvel appel ou nouvel essai n'est déclenché.
+
+Ces champs sont des observations non authentifiées du répondant : ils ne
+prouvent pas si Alpaca ou le proxy a produit le refus. Les formats volontairement
+refusés peuvent réduire les informations disponibles. Cette modification sert
+uniquement aux erreurs futures; elle ne peut récupérer une réponse déjà jetée.
+Les identifiants de corrélation éventuels restent dans le contexte privé de
+diagnostic et ne doivent pas être publiés avec des données de compte.
+
+Sources de la liste restreinte : [X-Request-ID](https://docs.alpaca.markets/us/docs/getting-started-with-trading-api#request-id),
+[code 40310000](https://docs.alpaca.markets/us/docs/options-trading-overview) et
+[code 42210000](https://docs.alpaca.markets/us/docs/orders-at-alpaca#sub-penny-increments-for-limit-orders).
+Ces exemples ne définissent pas une cause unique pour chaque code.
 
 ## Commandes sans écriture courtier
 

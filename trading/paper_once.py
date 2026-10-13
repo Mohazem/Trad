@@ -487,6 +487,7 @@ class OneShotPaper:
 
     def _reconcile_locked(self, spec, *, cancel_open=False):
         self.journal.require_attempt(spec.approval_digest())
+        errors = {}
         try:
             raw = self.broker.lookup()
             if raw is None:
@@ -495,17 +496,20 @@ class OneShotPaper:
             if result["state"] in OPEN and cancel_open:
                 try:
                     self.broker.transport.request(PAPER, "DELETE", "/v2/orders/" + raw["id"])
-                except Exception:
+                except Exception as exc:
                     # A fill can race with DELETE (including 422). One GET
                     # resolves that race; there is no second DELETE or POST.
-                    pass
+                    if isinstance(exc, PaperError):
+                        errors["cancellation_error"] = exc.safe_details()
                 raw = self.broker.lookup()
                 if raw is None:
-                    return self._unknown(spec)
+                    return {**self._unknown(spec), **errors}
                 result = self._record(spec, raw)
-            return result
-        except Exception:
-            return self._unknown(spec)
+            return {**result, **errors}
+        except Exception as exc:
+            if isinstance(exc, PaperError):
+                errors["reconciliation_error"] = exc.safe_details()
+            return {**self._unknown(spec), **errors}
 
     def submit_approved(self, spec, *, approved_digest, feed="iex"):
         # This method is deliberately absent from the CLI. Call only after the
@@ -532,8 +536,11 @@ class OneShotPaper:
                 return {**result, "duplicate_submission_avoided": True}
             snapshot = self.broker.snapshot(spec.symbol, feed=feed)
             plan = validate(spec, snapshot, self.clock())
-        except Exception:
+        except Exception as exc:
             self.journal.set_state("preflight_stopped")
+            if isinstance(exc, PaperError):
+                raise PaperError("preflight_stopped_no_post", exc.status,
+                                 request_id=exc.request_id, provider_error_code=exc.provider_error_code) from None
             raise PaperError("preflight_stopped_no_post") from None
         # Freshness is checked after all GETs; submission follows immediately.
         self.journal.set_state("post_attempt_unknown")
@@ -541,7 +548,10 @@ class OneShotPaper:
             raw = self.broker.transport.request(PAPER, "POST", "/v2/orders", body=plan["order"],
                                                before_send=lambda: validate(spec, snapshot, self.clock()))
             return self._record(spec, raw)
-        except Exception:
+        except Exception as exc:
             # 4xx, duplicate response, malformed response, timeout and any crash
             # are all treated conservatively. No automatic second POST, ever.
-            return self._reconcile_locked(spec)
+            result = self._reconcile_locked(spec)
+            if isinstance(exc, PaperError):
+                result["submission_error"] = exc.safe_details()
+            return result

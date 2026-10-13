@@ -30,7 +30,7 @@ def main():
             result["mode"] = "offline_snapshot_dry_run_not_submission_approval"
         print(json.dumps(result, indent=2))
     except PaperError as exc:
-        print(json.dumps({"status": "stopped", "code": exc.code, "http_status": exc.status}))
+        print(json.dumps({"status": "stopped", **exc.safe_details()}))
         raise SystemExit(1) from None
     except Exception:
         print(json.dumps({"status": "stopped", "code": "input_or_response_invalid"}))
