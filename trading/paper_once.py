@@ -540,7 +540,8 @@ class OneShotPaper:
             self.journal.set_state("preflight_stopped")
             if isinstance(exc, PaperError):
                 raise PaperError("preflight_stopped_no_post", exc.status,
-                                 request_id=exc.request_id, provider_error_code=exc.provider_error_code) from None
+                                 request_id=exc.request_id, provider_error_code=exc.provider_error_code,
+                                 response_detail=exc.response_detail) from None
             raise PaperError("preflight_stopped_no_post") from None
         # Freshness is checked after all GETs; submission follows immediately.
         self.journal.set_state("post_attempt_unknown")

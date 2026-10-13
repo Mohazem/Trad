@@ -3,7 +3,7 @@
 Cette branche ajoute une intégration **Alpaca Paper uniquement**, indépendante
 du simulateur. Les commandes historiques `trading demo` et `trading.ai_cli`
 restent hors ligne. Aucune boucle, planification, inférence distante ou exécution
-continue n'est ajoutée. Aucun ordre distant n'a été envoyé pour valider ce code.
+continue n'est ajoutée. Les tests automatisés n'envoient aucun ordre distant.
 
 ## État et prérequis
 
@@ -30,7 +30,7 @@ décrits ci-dessous, jamais le texte brut de la réponse.
 ### Diagnostic HTTP limité pour les erreurs futures
 
 `PaperError.safe_details()` conserve le code local fixe et le statut HTTP
-entier (100–599). Les seuls champs optionnels sont :
+entier (100–599). Les champs optionnels sont :
 
 - `request_id` : un unique en-tête `X-Request-ID` contenant exactement 32
   caractères hexadécimaux ASCII. Un doublon, un format différent ou une valeur
@@ -38,23 +38,43 @@ entier (100–599). Les seuls champs optionnels sont :
 - `provider_error_code` : uniquement les entiers documentés `40310000` avec
   HTTP 403 et `42210000` avec HTTP 422. Les codes inconnus, chaînes, flottants,
   doublons JSON ou correspondances de statut incohérentes sont omis.
+- `response_detail` : format JSON, texte ou HTML, état de lecture/décodage,
+  indicateur de troncature et extrait expurgé. Au maximum six fragments littéraux
+  reconnus sont conservés, dans un extrait de 512 caractères maximum; tout autre
+  texte devient `[REDACTED]`. Par exemple, une réponse contenant un motif reconnu
+  et un numéro de compte devient `[REDACTED] insufficient buying power [REDACTED]`.
+  Ce sont des fragments observés, pas une interprétation complète du message.
 
 Le transport examine au plus 4 097 octets du corps d'erreur, dans le délai total
 de la requête. Le code fournisseur n'est extrait que d'un objet JSON complet
-d'au plus 4 096 octets, de type `application/json` et sans compression.
-Tout message libre, corps de requête, URL renvoyée, cookie ou autre en-tête est
-écarté; aucune copie de la réponse brute n'est conservée dans l'erreur propagée.
+d'au plus 4 096 octets, de type `application/json` ou `application/problem+json`
+et sans compression. Seuls les champs textuels de premier niveau `message`,
+`error`, `detail`, `reason` et `title` sont examinés. Les identifiants, données
+personnelles, champs imbriqués et valeurs inconnues ne sont jamais recopiés.
+Pour le HTML complet, les attributs, commentaires, scripts, styles et formulaires
+sont exclus. Les réponses texte surdimensionnées sont examinées seulement dans
+leur préfixe; un JSON ou HTML tronqué, un JSON malformé ou un encodage invalide
+produit uniquement un diagnostic de format. Aucune décompression n'est tentée.
+
+Le catalogue fermé de fragments évite de dépendre uniquement d'expressions
+régulières pour masquer les secrets : le processus ne connaît pas les valeurs
+injectées par le proxy. Il peut donc perdre un motif nouveau ou trop détaillé.
+Les placeholders connus, lignes d'authentification/cookie et URL sont retirés
+avant recherche des fragments. Aucun corps brut ni valeur libre n'est conservé.
 La CLI expose cette projection. Les résultats de soumission/rapprochement
 préservent séparément `submission_error`, `reconciliation_error` ou
 `cancellation_error` lorsque disponibles. Les journaux privés existants ne sont
 ni réécrits ni réarmés. Aucun nouvel appel ou nouvel essai n'est déclenché.
 
 Ces champs sont des observations non authentifiées du répondant : ils ne
-prouvent pas si Alpaca ou le proxy a produit le refus. Les formats volontairement
-refusés peuvent réduire les informations disponibles. Cette modification sert
+prouvent pas si Alpaca ou le proxy a produit le refus. La source reste toujours
+`unverified`; `source_hint=proxy_or_network_policy_text` indique uniquement la
+présence d'un fragment explicite relatif au proxy ou à la politique réseau.
+Ni HTTP 403 ni le format JSON ne permettent d'attribuer la réponse. Cette modification sert
 uniquement aux erreurs futures; elle ne peut récupérer une réponse déjà jetée.
-Les identifiants de corrélation éventuels restent dans le contexte privé de
-diagnostic et ne doivent pas être publiés avec des données de compte.
+Les diagnostics réels, même expurgés, restent privés (fichiers 0600 dans un
+répertoire 0700 hors du dépôt). Ne jamais les publier dans une PR ou un service
+public. Aucun fichier ni téléversement automatique n'est ajouté au transport.
 
 Sources de la liste restreinte : [X-Request-ID](https://docs.alpaca.markets/us/docs/getting-started-with-trading-api#request-id),
 [code 40310000](https://docs.alpaca.markets/us/docs/options-trading-overview) et

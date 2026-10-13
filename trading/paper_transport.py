@@ -16,11 +16,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from .paper_diagnostics import MAX_ERROR_BYTES, read_error_body, safe_response_detail, unique_object
+
 PAPER = "https://paper-api.alpaca.markets"
 DATA = "https://data.alpaca.markets"
 SECRET_NAMES = ("ALPACA_PAPER_KEY", "ALPACA_PAPER_SECRET_")
 MAX_BYTES = 1024 * 1024
-MAX_ERROR_BYTES = 4096
 # Deliberately narrow documented examples, not inferred code ranges. See the
 # official source links in PAPER_README.md. Unknown codes are omitted.
 PROVIDER_ERROR_CODES = {403: frozenset({40310000}), 422: frozenset({42210000})}
@@ -36,23 +37,16 @@ def safe_provider_code(status, value):
     return value if type(value) is int and value in PROVIDER_ERROR_CODES.get(status, ()) else None
 
 
-def unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate_json_key")
-        result[key] = value
-    return result
-
-
 class PaperError(RuntimeError):
-    """Fixed local code plus a small validated HTTP diagnostic projection."""
-    def __init__(self, code, status=None, *, request_id=None, provider_error_code=None):
+    """Fixed local code plus validated, redacted HTTP diagnostics for private use."""
+    def __init__(self, code, status=None, *, request_id=None, provider_error_code=None,
+                 response_detail=None):
         super().__init__(code)
         self.code = code
         self.status = status if type(status) is int and 100 <= status <= 599 else None
         self.request_id = safe_request_id(request_id)
         self.provider_error_code = safe_provider_code(self.status, provider_error_code)
+        self.response_detail = safe_response_detail(response_detail)
 
     def safe_details(self):
         result = {"code": self.code, "http_status": self.status}
@@ -60,6 +54,8 @@ class PaperError(RuntimeError):
             result["request_id"] = self.request_id
         if self.provider_error_code is not None:
             result["provider_error_code"] = self.provider_error_code
+        if self.response_detail is not None:
+            result["response_detail"] = safe_response_detail(self.response_detail)
         return result
 
 
@@ -77,18 +73,8 @@ def http_error_details(error, sensitive_values=()):
             request_id = safe_request_id(ids[0])
     except Exception:
         pass
-    try:
-        content_type = error.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-        encoding = error.headers.get("Content-Encoding", "identity").lower()
-        if content_type == "application/json" and encoding == "identity":
-            raw = error.read(MAX_ERROR_BYTES + 1)
-            if len(raw) <= MAX_ERROR_BYTES:
-                value = json.loads(raw, object_pairs_hook=unique_object,
-                                   parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-                if isinstance(value, dict):
-                    provider_code = safe_provider_code(error.code, value.get("code"))
-    except Exception:
-        pass
+    response_detail, candidate_code = read_error_body(error, sensitive_values)
+    provider_code = safe_provider_code(error.code, candidate_code)
     # Reject reflected values already supplied to this request. In production
     # these are protected placeholders; the proxy owns the actual credentials.
     for value in sensitive_values:
@@ -97,7 +83,8 @@ def http_error_details(error, sensitive_values=()):
                 request_id = None
             if provider_code is not None and value in str(provider_code):
                 provider_code = None
-    return {"request_id": request_id, "provider_error_code": provider_code}
+    return {"request_id": request_id, "provider_error_code": provider_code,
+            "response_detail": response_detail}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
