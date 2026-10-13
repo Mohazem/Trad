@@ -214,7 +214,7 @@ class AttemptTests(unittest.TestCase):
         self.path = Path(self.tmp.name)/'attempt.sqlite3'
         self.journal = AttemptJournal(self.path, create=True)
         self.broker = FakeBroker()
-        self.runner = OneShotPaper(self.broker, self.journal, clock=lambda: NOW)
+        self.runner = OneShotPaper(self.broker, self.journal, mode="manual_one_shot", clock=lambda: NOW)
         self.spec = fixture()[0]
     def tearDown(self):
         self.tmp.cleanup()
@@ -231,10 +231,24 @@ class AttemptTests(unittest.TestCase):
         self.broker.transport.allow_write = False
         with self.assertRaises(PaperError): self.submit()
         self.assertEqual(self.posts(), [])
+    def test_default_read_only_mode_blocks_writes_before_broker_access(self):
+        runner = OneShotPaper(self.broker, self.journal, clock=lambda: NOW)
+        with self.assertRaisesRegex(PaperError, 'manual_one_shot_mode_required'):
+            runner.submit_approved(self.spec, approved_digest=self.spec.approval_digest())
+        with self.assertRaisesRegex(PaperError, 'manual_one_shot_mode_required'):
+            runner.reconcile(self.spec, cancel_open=True, approved_digest=self.spec.approval_digest())
+        self.assertEqual(self.broker.lookups, [None])
+        self.assertEqual(self.broker.transport.calls, [])
+    def test_unattended_and_recurring_modes_are_explicitly_forbidden(self):
+        for mode in ('unattended', 'recurring', 'continuous', 'run_forever', 'automatic'):
+            with self.subTest(mode=mode), self.assertRaisesRegex(PaperError, 'unattended_or_recurring_execution_forbidden'):
+                OneShotPaper(self.broker, self.journal, mode=mode)
+        self.assertEqual(self.broker.lookups, [None])
+        self.assertEqual(self.broker.transport.calls, [])
     def test_single_submission_and_restart_deduplication(self):
         self.assertEqual(self.submit()['state'], 'filled')
         self.broker.lookups = [order()]
-        self.runner = OneShotPaper(self.broker, AttemptJournal(self.path), clock=lambda: NOW)
+        self.runner = OneShotPaper(self.broker, AttemptJournal(self.path), mode="manual_one_shot", clock=lambda: NOW)
         self.assertEqual(self.submit()['state'], 'filled')
         self.assertEqual(len(self.posts()), 1)
     def test_different_second_spec_rejected_even_after_fill(self):
@@ -263,7 +277,7 @@ class AttemptTests(unittest.TestCase):
                 broker = FakeBroker()
                 broker.transport.post_result = response
                 broker.lookups = [None, order()]
-                runner = OneShotPaper(broker, journal, clock=lambda: NOW)
+                runner = OneShotPaper(broker, journal, mode="manual_one_shot", clock=lambda: NOW)
                 self.assertEqual(runner.submit_approved(self.spec,approved_digest=self.spec.approval_digest())['state'],'filled')
                 self.assertEqual(sum(c[1]=='POST' for c in broker.transport.calls),1)
     def test_lookup_auth_error_stops_without_post(self):
@@ -299,6 +313,52 @@ class AttemptTests(unittest.TestCase):
         self.assertTrue(self.journal.claim('a'*64))
         self.assertFalse(AttemptJournal(self.path).claim('a'*64))
         with self.assertRaises(PaperError): self.journal.claim('b'*64)
+    def test_reopened_unused_journal_is_reconciliation_only(self):
+        self.runner = OneShotPaper(self.broker, AttemptJournal(self.path), mode="manual_one_shot", clock=lambda: NOW)
+        with patch.object(self.broker, 'snapshot') as snapshot:
+            result = self.submit()
+            snapshot.assert_not_called()
+        self.assertEqual(result['state'], 'unknown')
+        self.assertEqual(result['action'], 'manual_reconciliation_required_no_resubmit')
+        self.assertEqual(self.broker.lookups, [])
+        self.assertEqual(self.posts(), [])
+        self.assertFalse(AttemptJournal(self.path).claim(self.spec.approval_digest()))
+    def test_restored_empty_backup_does_not_enable_post_after_restart(self):
+        empty_backup = self.path.read_bytes()
+        self.journal.claim(self.spec.approval_digest())
+        restored = Path(self.tmp.name) / 'restored.sqlite3'
+        restored.write_bytes(empty_backup)
+        restored.replace(self.path)
+        # A new instance cannot detect this structurally valid rollback. Its
+        # submission permission is absent, so 404/absence remains unknown.
+        self.runner = OneShotPaper(self.broker, AttemptJournal(self.path), mode="manual_one_shot", clock=lambda: NOW)
+        self.assertEqual(self.submit()['state'], 'unknown')
+        self.assertEqual(self.submit()['state'], 'unknown')
+        self.assertEqual(self.posts(), [])
+        self.assertEqual(self.spec.payload()['client_order_id'], CLIENT_ORDER_ID)
+    def test_restored_empty_backup_reconciles_matching_broker_order(self):
+        empty_backup = self.path.read_bytes()
+        self.journal.claim(self.spec.approval_digest())
+        self.path.write_bytes(empty_backup)
+        self.broker.lookups = [order()]
+        self.runner = OneShotPaper(self.broker, AttemptJournal(self.path), mode="manual_one_shot", clock=lambda: NOW)
+        result = self.submit()
+        self.assertEqual(result['state'], 'filled')
+        self.assertEqual(result['filled_qty'], '5')
+        self.assertEqual(self.posts(), [])
+    def test_reopened_empty_journal_lookup_errors_remain_unknown(self):
+        self.runner = OneShotPaper(self.broker, AttemptJournal(self.path), mode="manual_one_shot", clock=lambda: NOW)
+        for response in (PaperError('http_error', 401), PaperError('request_timeout'), {'ambiguous': True}):
+            self.broker.lookups = [response]
+            self.assertEqual(self.submit()['state'], 'unknown')
+            self.assertEqual(self.posts(), [])
+    def test_same_instance_does_not_regain_permission_after_inplace_restore(self):
+        empty_backup = self.path.read_bytes()
+        self.assertEqual(self.submit()['state'], 'filled')
+        self.path.write_bytes(empty_backup)
+        self.broker.lookups = [None]
+        self.assertEqual(self.submit()['state'], 'unknown')
+        self.assertEqual(len(self.posts()), 1)
     def test_concurrent_claims_reserve_one_slot(self):
         second = AttemptJournal(self.path)
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -344,12 +404,12 @@ class AttemptTests(unittest.TestCase):
     def test_process_crash_after_reserved_attempt_cannot_resubmit(self):
         with patch.object(self.broker.transport,'request',side_effect=KeyboardInterrupt()):
             with self.assertRaises(KeyboardInterrupt): self.submit()
-        restarted=OneShotPaper(self.broker,AttemptJournal(self.path),clock=lambda:NOW)
+        restarted=OneShotPaper(self.broker,AttemptJournal(self.path),mode="manual_one_shot",clock=lambda:NOW)
         self.assertEqual(restarted.submit_approved(self.spec,approved_digest=self.spec.approval_digest())['state'],'unknown')
         self.assertEqual(self.posts(),[])
     def test_operation_lock_blocks_submit_reconcile_and_cancel(self):
         self.journal.claim(self.spec.approval_digest())
-        second=OneShotPaper(self.broker,AttemptJournal(self.path),clock=lambda:NOW)
+        second=OneShotPaper(self.broker,AttemptJournal(self.path),mode="manual_one_shot",clock=lambda:NOW)
         with self.journal.locked():
             for call in [lambda:second.submit_approved(self.spec,approved_digest=self.spec.approval_digest()),
                          lambda:second.reconcile(self.spec),
@@ -418,6 +478,12 @@ class AttemptTests(unittest.TestCase):
 
 
 class BrokerReadTests(unittest.TestCase):
+    def test_lookup_uses_stable_experiment_client_order_id(self):
+        transport = Mock()
+        transport.request.side_effect = PaperError('http_error', 404)
+        self.assertIsNone(PaperBroker(transport).lookup())
+        transport.request.assert_called_once_with(PAPER, 'GET', '/v2/orders:by_client_order_id',
+                                                 params={'client_order_id': CLIENT_ORDER_ID})
     def test_market_request_is_bounded_and_records_exact_feed(self):
         spec, snapshot = fixture()
         transport = Mock()

@@ -263,6 +263,10 @@ class AttemptJournal:
 
     def __init__(self, path, *, create=False):
         self.path = Path(path).absolute()
+        # This is a process-local permission, not durable anti-rollback proof.
+        # Reopening an existing journal is always reconciliation-only, including
+        # a valid empty database restored from an old backup. It cannot submit.
+        self._initial_submission_available = create is True
         try:
             if create:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -373,6 +377,12 @@ class AttemptJournal:
             db.execute("UPDATE meta SET claimed=1 WHERE id=1")
             return True
 
+    def _take_initial_submission_permission(self):
+        """Consume once while locked; never recreate permission on recovery."""
+        available = self._initial_submission_available
+        self._initial_submission_available = False
+        return available
+
     def set_state(self, state):
         if state not in self.STATES:
             raise PaperError("invalid_journal_state")
@@ -438,8 +448,11 @@ def checked_order(raw, payload):
 
 
 class OneShotPaper:
-    def __init__(self, broker, journal, *, clock=lambda: datetime.now(timezone.utc)):
+    def __init__(self, broker, journal, *, mode="read_only", clock=lambda: datetime.now(timezone.utc)):
+        if mode not in {"read_only", "manual_one_shot"}:
+            raise PaperError("unattended_or_recurring_execution_forbidden")
         self.broker, self.journal, self.clock = broker, journal, clock
+        self.mode = mode
 
     def dry_run(self, spec, *, feed="iex"):
         return validate(spec, self.broker.snapshot(spec.symbol, feed=feed), self.clock())
@@ -450,6 +463,8 @@ class OneShotPaper:
         A cancellation acknowledgement is NOT proof of cancellation. Partial
         fills are retained; no liquidation or replacement order is attempted.
         """
+        if cancel_open and self.mode != "manual_one_shot":
+            raise PaperError("manual_one_shot_mode_required")
         if cancel_open and (not self.broker.transport.allow_write or approved_digest != spec.approval_digest()):
             raise PaperError("exact_cancel_approval_required")
         with self.journal.locked():
@@ -495,6 +510,8 @@ class OneShotPaper:
     def submit_approved(self, spec, *, approved_digest, feed="iex"):
         # This method is deliberately absent from the CLI. Call only after the
         # operator separately authorizes the exact analysis/order specification.
+        if self.mode != "manual_one_shot":
+            raise PaperError("manual_one_shot_mode_required")
         if not self.broker.transport.allow_write or approved_digest != spec.approval_digest():
             raise PaperError("exact_order_approval_required")
         with self.journal.locked():
@@ -502,6 +519,11 @@ class OneShotPaper:
 
     def _submit_locked(self, spec, *, feed):
         if not self.journal.claim(spec.approval_digest()):
+            return self._reconcile_locked(spec)
+        if not self.journal._take_initial_submission_permission():
+            # An empty recovered/restored database cannot prove that no prior
+            # request happened. Query the same experiment client ID once, record
+            # a confirmed matching order, or remain unknown. Never POST here.
             return self._reconcile_locked(spec)
         try:
             existing = self.broker.lookup()

@@ -7,12 +7,14 @@ continue n'est ajoutée. Aucun ordre distant n'a été envoyé pour valider ce c
 
 ## État et prérequis
 
-Le 13 octobre 2026, la politique effective autorise `paper-api.alpaca.markets`
-mais pas `data.alpaca.markets`. Aucun appel de données n'a donc été tenté.
-Les destinations des secrets ne sont pas exposées dans les métadonnées locales.
-L'opérateur doit vérifier ces deux autorisations distinctes avant toute lecture :
+La configuration republiée a permis de vérifier les lectures authentifiées
+Paper et données de marché. Cette observation ne garantit pas la configuration
+d'un autre environnement et ne valide pas les écritures courtier. Vérifier la
+politique effective dans chaque environnement avant toute lecture; les
+destinations des secrets ne sont pas exposées dans les métadonnées locales :
 
-- Ajouter `data.alpaca.markets` à la liste réseau autorisée, puis republier.
+- Vérifier que `paper-api.alpaca.markets` et `data.alpaca.markets` sont autorisés;
+  si une modification est nécessaire, la republier avant utilisation.
 - Autoriser **les deux destinations** `paper-api.alpaca.markets` et
   `data.alpaca.markets` pour chacun des secrets Network `ALPACA_PAPER_KEY` et
   `ALPACA_PAPER_SECRET_` (underscore final volontaire).
@@ -92,8 +94,11 @@ compte. Le chemin `outputs/` et les bases SQLite sont déjà ignorés par Git.
 Aucune commande CLI de soumission ou d'annulation n'existe. Le transport est
 en lecture seule par défaut. Un appelant Python de confiance peut utiliser
 `OneShotPaper.submit_approved` uniquement après l'autorisation explicite exacte
-de l'opérateur; il doit fournir le digest attendu et activer les écritures sur
-le transport. Ce verrou évite les accidents; ce n'est pas une authentification
+de l'opérateur; il doit sélectionner `mode="manual_one_shot"`, fournir le digest
+attendu et activer les écritures sur le transport. Le mode par défaut est
+`read_only`; soumission et annulation y sont interdites. Tout autre mode,
+notamment récurrent ou sans surveillance, est refusé. Ces verrous évitent les
+accidents; ils ne prouvent pas la présence d'un humain et ne sont pas une authentification
 cryptographique contre du code Python malveillant.
 
 Le `client_order_id` est fixé à `trad-paper-20261013-one-shot-01` pour toute
@@ -105,9 +110,28 @@ est refusée. Même une erreur de prévalidation après réservation consomme ce
 case : l'expérience s'arrête plutôt que de s'auto-réarmer.
 
 Une **initialisation unique explicite** utilise `AttemptJournal(path, create=True)`;
-elle refuse un fichier existant. La reprise utilise `AttemptJournal(path)` et
-refuse un fichier manquant, remplacé, corrompu, un schéma incompatible ou une
-tentative consommée qui aurait disparu. Aucune migration/reset automatique.
+elle refuse un fichier existant. Seule cette instance fraîchement initialisée
+dispose d'une permission de première soumission, consommée une seule fois dans
+le processus, sous verrou. Un redémarrage avant même cette première soumission
+perd cette permission : la reprise ne réarme jamais l'expérience.
+
+La reprise utilise `AttemptJournal(path)` et refuse un fichier manquant,
+corrompu, un schéma incompatible ou une ligne de tentative supprimée alors que
+le marqueur de consommation subsiste. Le remplacement de fichier est détecté
+pendant la vie d'une instance. **SQLite local ne prouve pas l'absence de rollback
+entre deux processus** : une ancienne copie valide peut restaurer à la fois la
+tentative et son marqueur. Une détection durable de ce cas exigerait une autorité
+indépendante persistante, absente de cette intégration.
+
+Pour cette raison, toute instance rouverte est limitée au rapprochement. Même
+avec une autorisation exacte, un journal récupéré vide réserve un état local et
+interroge seulement le `client_order_id` fixe. Un ordre correspondant est
+enregistré; une absence, un 404, une erreur ou une réponse ambiguë laisse l'état
+inconnu, sans POST. Une copie restaurée n'engendre jamais une nouvelle identité.
+Ne pas créer un autre journal avec `create=True` pour contourner cette limite;
+le code Python de confiance pourrait le faire, et le stockage local ne peut pas
+en certifier l'historique. Aucune migration/reset automatique ni exécution
+récurrente/sans surveillance n'est proposée ou autorisée.
 Le fichier est créé avec les permissions 0600 et conserve seulement le digest,
 l'identifiant d'ordre et le dernier état/volume rempli confirmé, jamais un compte
 complet ni des clés. Ces données privées restent sous `outputs/`.
@@ -120,7 +144,8 @@ externes. Conserver un seul journal, ne pas créer de copie pour contourner un
 état inconnu. Les tests couvrent interruptions Python et corruptions simulées;
 ils ne démontrent pas une garantie contre toutes les pannes de stockage.
 
-Avant le POST : recherche de l'identifiant chez le courtier, puis nouvelles
+Avant tout premier POST manuellement permis : recherche de l'identifiant fixe
+chez le courtier, puis nouvelles
 lectures du compte, positions, ordres ouverts, actif, horloge et données. Après
 préparation du transport, les dates et contrôles sont vérifiés encore une fois
 juste avant l'envoi. Après

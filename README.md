@@ -2,7 +2,7 @@
 
 Version 0.2.0, Python 3.11+. Simulation et rejeu : bibliothèque standard uniquement. Adaptateur API LLM optionnel : client SDK fourni par un environnement autorisé.
 
-**Branche expérimentale :** une intégration Paper ponctuelle séparée est décrite dans [PAPER_README.md](PAPER_README.md). Elle conserve les commandes ci-dessous hors ligne. Sa validation actuelle utilise des doubles et n'a envoyé aucun ordre; l'accès aux données de marché reste à configurer. Aucun service continu n'est lancé.
+**Branche expérimentale :** une intégration Paper ponctuelle séparée est décrite dans [PAPER_README.md](PAPER_README.md). Elle conserve les commandes ci-dessous hors ligne. Les lectures authentifiées Paper et marché ont été vérifiées séparément; les écritures restent testées avec des doubles, sans ordre distant. Le mode par défaut est en lecture seule; toute reprise du journal est limitée au rapprochement et les modes d'ordres récurrents/sans surveillance sont interdits. Aucun service continu de trading n'est lancé.
 
 **Cette version associe le simulateur déterministe à une couche consultative IA à trois rôles. Trois réponses réellement produites par des modèles pendant un test ponctuel sont enregistrées et rejouables; leur synthèse s’abstient. Le programme Python n’a pas encore authentifié ni appelé une API LLM distante. Aucun service autonome continu ni connexion courtier n’est déployé. Voir [AI_README.md](AI_README.md) pour l’état exact et les commandes.**
 
