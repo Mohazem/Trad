@@ -86,7 +86,7 @@ def numeric_string(value, lower, upper):
     return amount
 
 
-def validate_packet(packet, now, max_age_seconds=90):
+def validate_packet(packet, now, max_age_seconds=90, *, data_kind="synthetic"):
     # Round-trip freezes the supplied object and rejects non-JSON/oversized input.
     try:
         packet = strict_json(canonical(packet))
@@ -95,7 +95,7 @@ def validate_packet(packet, now, max_age_seconds=90):
     _keys(packet, ("packet_id", "asof", "data_kind", "sources"))
     if type(packet["packet_id"]) is not str or not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", packet["packet_id"]):
         _fail()
-    if packet["data_kind"] != "synthetic":
+    if data_kind not in ("synthetic", "market") or packet["data_kind"] != data_kind:
         _fail()
     asof = timestamp(packet["asof"])
     if not 0 <= (utc(now) - asof).total_seconds() <= max_age_seconds:

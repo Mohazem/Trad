@@ -1,5 +1,7 @@
 # Couche IA consultative et simulation locale
 
+**Mode connecté ajouté :** [CONNECTED.md](CONNECTED.md) décrit les données Alpaca, le fournisseur Hugging Face et le tableau de bord HTML. Il est distinct du simulateur synthétique décrit ici. L’adaptateur OpenAI historique reste dans le dépôt pour compatibilité, mais le nouveau mode connecté utilise Hugging Face uniquement.
+
 ## État réel de cette version
 
 La chaîne **analyste → critique → synthèse** est implémentée, avec un fournisseur interchangeable et un adaptateur pour l'API OpenAI Responses. Les propositions passent ensuite par les contrôles déterministes existants.

@@ -1,4 +1,33 @@
+## Correction des séances
+
+97 tests réussis. Contrôle Alpaca réel : AAPL et MSFT fermés, prochaine ouverture le 19 octobre 2026 à 13 h 30 UTC ; BTC/USD récent. Le stockage Qwen reste refusé par le proxy (CONNECT 403). Mise à jour réseau non enregistrée : brouillon non modifiable.
+
+## Reprise du 16 octobre 2026 (Toronto)
+
+- 95 tests unitaires réussis.
+- Alpaca : AAPL et MSFT périmés, BTC/USD récent lors du contrôle.
+- Ollama 0.6.8 démarré ; registre HTTP 200, poids refusés sur le domaine de stockage précisé dans LOCAL_MODEL.md. Aucune inférence locale validée.
+- Ajout du lanceur `scripts/start_local.sh` pour reprendre les services sans téléchargement automatique.
+
 # Validation du simulateur et de la couche IA
+
+## Passage au petit modèle local
+
+- 95 tests réussis : les quatre nouveaux tests vérifient le fournisseur Ollama, le schéma contraint, le plafond de sortie et l’absence de clé LLM requise.
+- Ollama 0.6.8 installé après vérification SHA256 de l’archive officielle ; serveur CPU local démarré sur 127.0.0.1:11434.
+- Fournisseur par défaut : `ollama`, modèle souhaité : `qwen2.5:1.5b`.
+- Le téléchargement des poids a échoué avec `Forbidden` sur le registre Ollama. Les exigences réseau et les instructions d’installation/démarrage sont enregistrées en brouillon. L’inférence locale réelle reste non validée jusqu’au téléchargement.
+- Le tableau de bord a été redémarré avec le fournisseur local et signale le modèle absent. Voir [LOCAL_MODEL.md](LOCAL_MODEL.md).
+
+## Extension connectée validée dans la session du 16 octobre 2026
+
+- 91 tests réussis (75 existants + 16 tests de collecte, fournisseur Hugging Face et serveur HTTP).
+- Lecture authentifiée Alpaca des trois instruments : AAPL, MSFT, BTC/USD. Les horodatages anciens des actions sont signalés et exclus de l’analyse.
+- Interface testée dans Chromium : trois graphiques affichés, aucun appel IA automatique, bouton IA désactivé sans configuration, aucune erreur JavaScript et aucune sortie horizontale à 390 pixels.
+- Adaptateur Hugging Face testé avec un double de transport : schéma strict, trois appels maximum, refus des réponses tronquées/outils/refus et abstention sur erreur. Une vraie inférence nécessite encore une nouvelle clé sécurisée, un modèle servi et l’activation du domaine.
+- Aucun ordre Paper ou réel envoyé. Voir [CONNECTED.md](CONNECTED.md).
+
+Les vérifications historiques ci-dessous concernent le scénario synthétique initial.
 
 Validation exécutée le 13 octobre 2026 dans l'environnement cloud de développement, Python 3.12. Aucun compte ni réseau de trading utilisé.
 

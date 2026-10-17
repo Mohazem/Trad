@@ -1,4 +1,17 @@
-# Socle de simulation hors ligne, actions et crypto
+# Trad : marchés connectés, analyse IA et simulation
+
+**Installation sur Mac M5 / Apple Silicon : [instructions pour Codex local](MACOS.md).**
+Lancer `bash scripts/start_macos.sh` après installation de Python et Ollama.
+
+Un mode **consultatif connecté** récupère AAPL, MSFT et BTC/USD via Alpaca, puis peut demander trois avis au petit modèle **Qwen 2.5 1.5B exécuté localement avec Ollama**. Hugging Face reste une option explicite. Une interface HTML affiche les graphiques, les dates des observations et les avis. Aucun ordre courtier n’est envoyé.
+
+```sh
+bash scripts/start_local.sh --port 8080
+```
+
+Voir [LOCAL_MODEL.md](LOCAL_MODEL.md) pour installer et démarrer le modèle local, et [CONNECTED.md](CONNECTED.md) pour les données Alpaca et l’option Hugging Face. Les accès marché fonctionnent ; Ollama est installé, mais le registre est accessible mais le téléchargement du modèle reste bloqué sur un domaine de stockage distinct (voir LOCAL_MODEL.md). Le simulateur décrit ci-dessous garde son fonctionnement hors ligne.
+
+## Socle de simulation hors ligne, actions et crypto
 
 Version 0.2.0, Python 3.11+. Simulation et rejeu : bibliothèque standard uniquement. Adaptateur API LLM optionnel : client SDK fourni par un environnement autorisé.
 
