@@ -1,0 +1,7 @@
+# Optional research environment only. Core simulation/replay need none of these.
+# Direct dependencies pinned; native wheels and transitive versions recorded in manifests.
+lightgbm==4.6.0
+xgboost==3.0.5; sys_platform != "linux"
+xgboost-cpu==3.0.5; sys_platform == "linux"
+numpy==2.2.6
+scipy==1.15.3

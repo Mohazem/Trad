@@ -94,3 +94,51 @@ Ces valeurs vérifient la reproductibilité d'un scénario fabriqué. Elles ne d
 Connexion/authentification Alpaca, acceptation effective des ordres par un courtier, données réelles, authentification et appel réseau de l’adaptateur LLM, règles de séances, fills partiels, traitement des timeouts distants, reprise après panne machine, performance financière, surveillance continue et service 24 h/24.
 
 Les erreurs injectées testent le rollback applicatif. Elles ne remplacent pas une qualification du stockage après panne électrique. Aucune action distante ambiguë n'existe ici; la réconciliation avant tout renvoi devra être développée avant d'ajouter un transport Paper.
+
+## Recette multi-horizons sur le checkout 3a0689e
+
+Baseline de départ : 97 tests réussis, aucun changement utilisateur présent.
+Les phases et divergences sont documentées dans
+[docs/MULTI_HORIZON.md](docs/MULTI_HORIZON.md).
+
+Vérifications finales exécutées :
+
+- Python standard : `python3 -m unittest discover -s tests -v` : **133 tests,
+  131 réussis, 2 ignorés** (bibliothèques ML optionnelles absentes du Python système).
+- Environnement isolé `/tmp/trad-ml-venv` avec `requirements-ml.txt` :
+  `python -m unittest discover -s tests -v` : **133 tests réussis, aucun ignoré**.
+- Tests natifs : entraînement et inférence LightGBM/XGBoost sur fixtures
+  synthétiques, refus in-sample, coûts dépassant la calibration et artefact
+  corrompu ; comparaison après validation avec bornes identiques aux benchmarks.
+  Le premier test natif LightGBM avait révélé une entrée de type liste non
+  acceptée : correction par tableaux NumPy, puis nouvelle exécution réussie.
+- `python3 -m compileall -q trading tests`, `node --check` pour les deux scripts
+  du dashboard, `bash -n` des lanceurs macOS/Linux et `git diff --check` : réussis.
+- Recette CLI réelle : 180 bougies minute synthétiques, benchmarks et rapports,
+  entraînement LightGBM walk-forward, signal typé et journal SQLite (une ligne),
+  comparaison ML/cash/buy-and-hold/momentum sur le même intervalle post-validation.
+  Le signal de test est refusé pour `authoritative_account_unavailable` et
+  `execution.status=disabled`, `armed=false`.
+- Démonstration historique et rejeu IA enregistré réexécutés dans de nouveaux
+  dossiers temporaires ; simulateur sans trading réseau, rejeu en abstention.
+- `/strategies` et `/api/strategies` testés en HTTP : aucun appel aux marchés
+  ou modèles, aucun démarrage Paper, positions et budget restant inconnus.
+- Tests des timeouts routés, JSON invalide, désaccord Deep Analysis, coûts,
+  compte absent/périmé/désarmé/arrêté/incertain, duplications de signaux,
+  bougies incomplètes et anti-look-ahead : réussis.
+
+Ollama indisponible lors du contrôle : **benchmark Qwen3 non exécuté**, aucune
+mesure de RAM/latence sur Mac M5, aucun poids téléchargé. L'installation ML
+native a été vérifiée sous Linux x86_64/Python 3.12, pas sur macOS.
+Aucun historique réel multi-horizon, entraînement réel, performance indépendante,
+ordre Paper distant ou résultat de réconciliation d'ordre distant validé.
+Le moteur Paper attendu et la baseline crypto EMA/RSI restent absents du checkout.
+La branche distante one-shot distincte n'a pas été fusionnée. L'impossibilité de
+resoumission réseau reste structurelle ici : aucun chemin d'envoi n'est ajouté ;
+les tests ne démontrent pas une intégration à un moteur Paper inexistant.
+
+Contrôle connecté courant supplémentaire : les GET marché réels AAPL, MSFT et
+BTC/USD ont retourné **HTTP 401**, avant le traitement des bougies. L'accès
+Alpaca authentifié n'est donc pas validé dans cette session. Les contrats de
+lecture et le dashboard passent avec doubles de transport, mais cela ne résout
+pas les credentials de l'environnement. Aucun secret n'a été affiché ni modifié.

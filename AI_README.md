@@ -1,6 +1,6 @@
 # Couche IA consultative et simulation locale
 
-**Mode connecté ajouté :** [CONNECTED.md](CONNECTED.md) décrit les données Alpaca, le fournisseur Hugging Face et le tableau de bord HTML. Il est distinct du simulateur synthétique décrit ici. L’adaptateur OpenAI historique reste dans le dépôt pour compatibilité, mais le nouveau mode connecté utilise Hugging Face uniquement.
+**Mode connecté ajouté :** [CONNECTED.md](CONNECTED.md) décrit les données Alpaca, le fournisseur Hugging Face et le tableau de bord HTML. Il est distinct du simulateur synthétique décrit ici. L’adaptateur OpenAI historique reste dans le dépôt pour compatibilité, le mode connecté utilise Ollama par défaut et Hugging Face seulement sur configuration explicite.
 
 ## État réel de cette version
 
@@ -94,3 +94,11 @@ Documentation officielle consultée le 13 octobre 2026 :
 - Supervision, planification durable et exploitation continue
 
 Ce livrable fonctionne sur un instantané **entièrement synthétique**. Il ne constitue ni un backtest réel, ni une stratégie calibrée, ni un service autonome continu. Aucune performance financière et aucune limitation garantie des pertes ne sont démontrées. La définition du seuil arbitraire de démonstration de 20 % et les autres réserves du README restent applicables.
+
+## Extension consultative multi-horizons
+
+AdvisoryPipeline accepte désormais `role_providers={...}` et des signaux quantitatifs
+validés, sans modifier les schémas existants ni donner accès à un broker.
+Le fournisseur unique reste le comportement par défaut. Voir
+[docs/MULTI_HORIZON.md](docs/MULTI_HORIZON.md) pour le routage explicite, le
+benchmark local et les limites du moteur Paper absent.

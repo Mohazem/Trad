@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import threading
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -59,10 +60,14 @@ def configuration_status():
     backend = os.environ.get("TRAD_AI_PROVIDER", "ollama")
     model = os.environ.get("TRAD_LOCAL_MODEL", "qwen2.5:1.5b") if backend == "ollama" else os.environ.get("TRAD_HF_MODEL", "")
     ready = bool(credential("TRAD_HF_TOKEN", "HF_TOKEN")) if backend == "huggingface" else False
+    role_models = None
     if backend == "ollama":
         try:
-            ready = any(m.get("name") == model for m in local_json("/api/tags", timeout=1).get("models", []))
-        except (ConnectedError, AttributeError, TypeError):
+            from .model_routing import configured_roles, routing_settings
+            installed = local_json("/api/tags", timeout=1).get("models", [])
+            role_models = configured_roles(routing_settings(os.environ), installed, lambda name: name)
+            ready = bool(role_models) if role_models is not None else any(m.get("name") == model for m in installed)
+        except (ConnectedError, AttributeError, TypeError, ValueError, OSError):
             ready = False
     return {
         "market_credentials": bool(credential("ALPACA_PAPER_KEY", "APCA_API_KEY_ID") and
@@ -70,6 +75,7 @@ def configuration_status():
         "ai_credentials": ready,  # compatibility: local mode requires no credentials
         "ai_ready": ready,
         "ai_provider": backend,
+        "role_models": role_models,
         "ai_model": model,
         "analysis_only": True,
     }
@@ -90,22 +96,36 @@ def local_json(path, *, payload=None, timeout=30):
         raise ConnectedError("Ollama local indisponible : démarrer le serveur et installer le modèle") from None
 
 
+_OLLAMA_LOCK = threading.Lock()
+
+
 class OllamaProvider:
     label = "ollama_local_inference"
 
-    def __init__(self, model=None, transport=local_json):
+    def __init__(self, model=None, transport=local_json, *, unload_after=False):
         self.model = model or os.environ.get("TRAD_LOCAL_MODEL", "qwen2.5:1.5b")
         if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,150}", self.model):
             raise ConnectedError("Nom de modèle local invalide")
         self.transport = transport
+        self.unload_after = unload_after
+        self.last_metrics = {}
 
     def complete(self, request, timeout_seconds):
+        if not _OLLAMA_LOCK.acquire(timeout=timeout_seconds):
+            raise ConnectedError("Ollama déjà occupé")
+        try:
+            return self._complete(request, timeout_seconds)
+        finally:
+            _OLLAMA_LOCK.release()
+
+    def _complete(self, request, timeout_seconds):
+        self.last_metrics = {}
         result = self.transport("/api/chat", payload={
             "model": self.model,
             "messages": [{"role": "system", "content": request.instructions},
                          {"role": "user", "content": request.input_json}],
             "format": strict_json(request.schema_json), "stream": False,
-            "keep_alive": "30m", "options": {"temperature": 0, "num_predict": 512,
+            "keep_alive": 0 if self.unload_after else "30m", "options": {"temperature": 0, "num_predict": 512,
                                                 "num_ctx": 4096, "num_thread": 4}},
             timeout=timeout_seconds)
         message = result.get("message", {})
@@ -113,6 +133,10 @@ class OllamaProvider:
                 message.get("tool_calls") or not isinstance(message.get("content"), str) or
                 not message["content"]):
             raise ConnectedError("Réponse locale tronquée ou invalide")
+        for name in ("eval_count", "prompt_eval_count", "eval_duration", "load_duration"):
+            value = result.get(name)
+            if type(value) is int and value >= 0:
+                self.last_metrics[name] = value
         return message["content"]
 
 
@@ -129,6 +153,8 @@ def normalize_bars(raw, now):
             if at > now or at in seen:
                 raise ValueError()
             seen.add(at)
+            if at + timedelta(minutes=1) > now:
+                continue  # An in-progress minute must never enter a close-based summary.
             result.append({"asof": at.isoformat(), "close": format(price.quantize(Decimal("0.00000001")), "f")})
     except (ValueError, TypeError, KeyError, ArithmeticError):
         raise ConnectedError("Prix ou dates de marché invalides") from None
@@ -256,7 +282,17 @@ def analyze(market, provider=None, now=None):
             provider = HuggingFaceProvider(credential("TRAD_HF_TOKEN", "HF_TOKEN"), os.environ.get("TRAD_HF_MODEL", ""))
         else:
             raise ConnectedError("TRAD_AI_PROVIDER doit être ollama ou huggingface")
-    result = AdvisoryPipeline(provider, timeout_seconds=30 if isinstance(provider, OllamaProvider) else 20, data_kind="market").evaluate(
+    roles = None
+    if isinstance(provider, OllamaProvider):
+        from .model_routing import configured_roles, routing_settings
+        try:
+            settings = routing_settings(os.environ)
+            if settings.get("TRAD_LLM_ROUTING_ENABLED", "0") == "1":
+                roles = configured_roles(settings, local_json("/api/tags").get("models", []),
+                                         lambda name: OllamaProvider(name, unload_after=True))
+        except (ValueError, TypeError, OSError):
+            raise ConnectedError("Modèles par rôle absents ou configuration invalide : vérifier les poids et le fallback explicite") from None
+    result = AdvisoryPipeline(provider, role_providers=roles, timeout_seconds=30 if isinstance(provider, OllamaProvider) else 20, data_kind="market").evaluate(
         packet, now, replace(Config(), max_quote_age_seconds=MAX_AGE))
     # Do not show a proposal as current if a source aged out during inference.
     finished = datetime.now(timezone.utc) if wall_clock else now
@@ -265,7 +301,8 @@ def analyze(market, provider=None, now=None):
     except ValueError:
         raise ConnectedError("Données devenues périmées pendant l’analyse : résultat non publié") from None
     included = sorted({s["symbol"] for s in packet["sources"]})
-    return {"mode": "market_advisory_only", "model": getattr(provider, "model", provider.label),
+    return {"mode": "market_advisory_only", "model": "per_role_routing" if roles else getattr(provider, "model", provider.label),
+            "role_models": {role: selected.model for role, selected in roles.items()} if roles else None,
             "analyzed_at": now.isoformat(), "symbols_analyzed": included,
             "symbols_excluded": [s for s in SYMBOLS if s not in included],
             "result": asdict(result), "execution": "disabled", "packet": packet}

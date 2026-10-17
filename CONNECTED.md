@@ -78,3 +78,11 @@ Documentation officielle de référence : [Chat completion](https://huggingface.
 ## État des séances actions
 
 Le tableau de bord interroge uniquement en lecture l’horloge Alpaca Paper (`GET /v2/clock`). Une réponse récente indiquant une fermeture affiche « Marché fermé » et la prochaine ouverture. Les cours anciens restent exclus de l’analyse. Si l’horloge échoue, les contrôles de fraîcheur continuent sans supposer de fermeture. Aucun endpoint d’ordre n’est autorisé.
+
+## Vue de recherche multi-horizons
+
+`/strategies` et `/api/strategies` lisent uniquement les artefacts locaux décrits
+dans [docs/MULTI_HORIZON.md](docs/MULTI_HORIZON.md). Ces routes ne consultent
+pas Alpaca et ne démarrent aucun moteur. La collecte connectée ignore les
+bougies minute encore en cours. Le routage LLM optionnel conserve Ollama et
+exige des modèles installés ou un fallback explicitement configuré.

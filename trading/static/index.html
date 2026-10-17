@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="fr">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="csrf-token" content="__CSRF_TOKEN__"><title>Trad · Marchés et analyse IA</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-<body><main>
+<body><main><nav><a href="/strategies">Stratégies · Minutes / Jours / Mois</a></nav>
 <header><span class="eyebrow">TRAD / ALPACA + IA LOCALE · HUGGING FACE EN OPTION</span><h1>Marchés &amp; analyse IA</h1><p>Observations réelles, analyse consultative à trois rôles. Aucun ordre envoyé à un courtier.</p><div class="actions"><button id="refresh">Actualiser les marchés</button><button id="analyze" disabled>Demander une analyse IA</button></div><p class="muted">Par défaut, Qwen 2.5 fonctionne sur cette machine via Ollama : aucune clé LLM ni facturation API. Au maximum trois appels locaux, de 512 tokens chacun, sans nouvelle tentative. Hugging Face reste une option explicite payante selon le compte. Aucun appel IA automatique.</p></header>
 <section class="notice" aria-label="État de la connexion"><p id="config">Vérification de la configuration…</p><p id="status" role="status" aria-live="polite">Chargement des données…</p></section>
 <section><h2>Cours observés</h2><p class="muted">Clôtures de bougies d’une minute : 30 observations par instrument. Actions : flux IEX, couverture partielle du marché. Crypto : flux Alpaca US. Les heures affichées sont en UTC. Une série de plus de 180 secondes est exclue de l’analyse IA.</p><div id="markets" class="grid"></div></section>

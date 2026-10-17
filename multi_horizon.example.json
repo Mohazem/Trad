@@ -1,0 +1,16 @@
+{
+  "multi_horizon": {
+    "enabled": false,
+    "paper_only": true,
+    "minute_enabled": false,
+    "swing_enabled": false,
+    "portfolio_enabled": false,
+    "routing_enabled": false,
+    "analyst_model": "qwen3:8b",
+    "critic_model": "qwen3:14b",
+    "synthesizer_model": "qwen3:8b",
+    "minute_budget": "15",
+    "swing_budget": "15",
+    "portfolio_budget": "20"
+  }
+}

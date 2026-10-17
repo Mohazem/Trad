@@ -295,3 +295,11 @@ class WebTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+class ClosedCandleTests(unittest.TestCase):
+    def test_in_progress_bar_not_used_as_close(self):
+        bars=[{'t':(NOW-timedelta(seconds=30)).isoformat(),'c':100},
+              {'t':(NOW-timedelta(minutes=1)).isoformat(),'c':99}]
+        result=normalize_bars(bars,NOW)
+        self.assertEqual(len(result),1)
+        self.assertEqual(result[0]['close'],'99.00000000')

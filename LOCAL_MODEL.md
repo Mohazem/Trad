@@ -54,3 +54,10 @@ Le tableau de bord vérifie que le serveur Ollama répond et que le modèle dema
 - 95 tests réussis, dont quatre contrôles du fournisseur local, de ses limites et de sa séparation avec les credentials distants.
 - Vérification du 16 octobre 2026 (heure de Toronto) : le registre répond HTTP 200. Le téléchargement des poids redirige vers `dd20bb891979d25aebc8bec07b2b3bbc.r2.cloudflarestorage.com`, qui reste refusé par le proxy. Le domaine de stockage déjà configuré est différent. Ajouter cette destination dans la configuration réseau et appliquer le changement avant de relancer `ollama pull`.
 - Aucune véritable inférence locale n’a donc encore été validée. Après téléchargement, vérifier une analyse complète sur des données récentes ; un code d’abstention lié au fournisseur n’établit pas le fonctionnement du modèle.
+
+## Routage optionnel, désactivé par défaut
+
+Voir [docs/MULTI_HORIZON.md](docs/MULTI_HORIZON.md) pour les candidats Qwen3
+8B/14B/8B, les prérequis et le benchmark explicite. Aucun de ces poids n’est
+installé automatiquement ; aucune mesure Qwen3 sur Mac M5 n’a été réalisée.
+Le chemin mono-modèle Qwen 2.5 reste la valeur par défaut.

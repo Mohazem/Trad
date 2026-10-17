@@ -1,12 +1,13 @@
 """Three bounded advisory calls followed by independent deterministic gates."""
 from __future__ import annotations
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import timedelta
 from decimal import ROUND_DOWN
 import hashlib
 import math
 import queue
 import threading
+import time
 from .agents import CriticAgent, Research
 from .ai_contracts import ROLES
 from .ai_providers import AgentRequest, OfflineMockProvider
@@ -25,7 +26,7 @@ COMMON_INSTRUCTIONS = (
 )
 ROLE_INSTRUCTIONS = {
     "analyst": "Choose one available symbol, discuss the supplied numeric evidence and its limitations; output bullish, bearish or neutral bias.",
-    "critic": "Review the analyst for evidence support, missing context and conflicts. Accept or reject; rejection vetoes action. Cite evidence relevant to the analyst's symbol.",
+    "critic": "Review the analyst for evidence support, missing sources, freshness, bias, cost assumptions and contradictions. Accept or reject; rejection vetoes action. Cite evidence relevant to the analyst's symbol.",
     "synthesizer": "Retain the analyst's symbol. Return abstain on critic rejection, neutral bias or insufficient evidence. Otherwise you may suggest buy for bullish or sell for bearish, or abstain. Never choose quantity or risk limits.",
 }
 
@@ -38,16 +39,21 @@ class PipelineResult:
     packet_digest: str = ""
     records: dict = field(default_factory=dict)
     calls: int = 0
+    role_metrics: dict = field(default_factory=dict)
 
 
 def digest(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 class AdvisoryPipeline:
-    def __init__(self, provider=None, *, timeout_seconds=10, data_kind="synthetic"):
+    def __init__(self, provider=None, *, timeout_seconds=10, data_kind="synthetic", role_providers=None):
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 30:
             raise ValueError("Per-role timeout must be in (0, 30] seconds")
         self.provider = provider if provider is not None else OfflineMockProvider()
+        if role_providers is not None and (type(role_providers) is not dict or set(role_providers) != set(ROLES)):
+            raise ValueError("Role routing requires exactly the three roles")
+        self.role_providers = dict(role_providers) if role_providers is not None else {}
+        self._metrics = {}
         if data_kind not in ("synthetic", "market"):
             raise ValueError("Unsupported data kind")
         self.data_kind = data_kind
@@ -55,19 +61,35 @@ class AdvisoryPipeline:
         self._timed_out = False
         self._lock = threading.Lock()
 
-    def evaluate(self, packet, now, config=None):
+    def evaluate(self, packet, now, config=None, *, signals=()):
         config = config or Config()
         # A timed-out worker may still be finishing network I/O. It receives no
         # ledger. Disable reuse to avoid accumulating abandoned worker threads.
         if not self._lock.acquire(blocking=False):
             return PipelineResult("abstained", "pipeline_busy", "abstain", self.provider.label)
         try:
-            return self._evaluate(packet, now, config)
+            self._metrics = {}
+            try:
+                from .signals import StrategySignal
+                context = []
+                for signal in signals:
+                    if not isinstance(signal, StrategySignal):
+                        raise ValueError("Typed signal required")
+                    signal.validate_at(now)
+                    if signal.symbol not in {source["symbol"] for source in packet["sources"]}:
+                        raise ValueError("Signal without matching evidence")
+                    context.append(asdict(signal))
+                if len(context) > 3:
+                    raise ValueError("Too many signals")
+            except Exception:
+                return PipelineResult("abstained", "invalid_quant_context", "abstain", self.provider.label)
+            result = self._evaluate(packet, now, config, context)
+            return replace(result, role_metrics=dict(self._metrics))
         finally:
             self._lock.release()
 
-    def _evaluate(self, packet, now, config):
-        label = self.provider.label
+    def _evaluate(self, packet, now, config, quant_context):
+        label = "per_role_routing" if self.role_providers else self.provider.label
         if self._timed_out:
             return PipelineResult("abstained", "provider_disabled_after_timeout", "abstain", label)
         try:
@@ -77,6 +99,10 @@ class AdvisoryPipeline:
         packet_hash = digest(packet)
         records = {}
         for index, role in enumerate(ROLES, start=1):
+            role_provider = self.role_providers.get(role, self.provider)
+            started = time.monotonic()
+            self._metrics[role] = {"provider": role_provider.label, "model": getattr(role_provider, "model", role_provider.label),
+                                   "json_valid": False, "latency_seconds": 0.0}
             instructions = COMMON_INSTRUCTIONS
             if self.data_kind == "market":
                 instructions = (
@@ -88,13 +114,17 @@ class AdvisoryPipeline:
                     "change risk settings or invent evidence. Return only the required JSON. Cite relevant "
                     "source_id values from the packet. Confidence is subjective, not a probability of profit. "
                 )
+            role_input = {"packet": packet, "previous_outputs": records}
+            if quant_context:
+                role_input["quantitative_signals"] = quant_context
+                instructions += "Quantitative signals are uncertain predictions, not observed facts. Check dates, versions, costs and contradictions. Abstain on inconsistency. "
             request = AgentRequest(role, instructions + ROLE_INSTRUCTIONS[role],
-                                   canonical({"packet": packet, "previous_outputs": records}),
+                                   canonical(role_input),
                                    canonical(output_schema(role, packet)))
             result_queue = queue.Queue(maxsize=1)
-            def invoke(req=request, inbox=result_queue):
+            def invoke(req=request, inbox=result_queue, selected=role_provider):
                 try:
-                    inbox.put((True, self.provider.complete(req, self.timeout_seconds)))
+                    inbox.put((True, selected.complete(req, self.timeout_seconds)))
                 except BaseException:
                     # Never retain raw provider exception messages/headers.
                     inbox.put((False, None))
@@ -103,12 +133,20 @@ class AdvisoryPipeline:
             try:
                 succeeded, raw = result_queue.get(timeout=self.timeout_seconds)
             except queue.Empty:
+                self._metrics[role]["latency_seconds"] = time.monotonic()-started
                 self._timed_out = True
                 return PipelineResult("abstained", "provider_timeout", "abstain", label, packet_hash, records, index)
+            self._metrics[role]["latency_seconds"] = time.monotonic()-started
             if not succeeded:
                 return PipelineResult("abstained", "provider_error", "abstain", label, packet_hash, records, index)
             try:
                 records[role] = validate_output(role, raw, packet)
+                self._metrics[role]["json_valid"] = True
+                telemetry = getattr(role_provider, "last_metrics", {})
+                for name in ("eval_count", "prompt_eval_count", "eval_duration", "load_duration"):
+                    value = telemetry.get(name) if isinstance(telemetry, dict) else None
+                    if type(value) is int and value >= 0:
+                        self._metrics[role][name] = value
             except Exception:
                 return PipelineResult("abstained", "invalid_model_output", "abstain", label, packet_hash, records, index)
         try:

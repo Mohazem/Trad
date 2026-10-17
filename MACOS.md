@@ -18,9 +18,11 @@ courtier n’est envoyé.
    peut nécessiter une action locale de l’utilisateur. Ne pas exécuter le
    script Linux `scripts/install_local.sh` sur macOS.
 3. Depuis le dépôt, exécuter `bash scripts/start_macos.sh`. Ce script vérifie
-   les prérequis, lance Ollama si nécessaire, télécharge le modèle absent,
+   les prérequis, lance Ollama si nécessaire, refuse un modèle absent,
    vérifie sa disponibilité, exécute les tests puis lance le tableau de bord.
-   Le téléchargement initial est d’environ 1 Go.
+   Télécharger explicitement le modèle avec `ollama pull qwen2.5:1.5b`
+   après avoir lancé Ollama, puis relancer le script. Aucun téléchargement
+   automatique. Le téléchargement initial est d’environ 1 Go.
 4. Vérifier `http://127.0.0.1:8080/api/health` : `ai_ready` doit être vrai.
    Ouvrir `http://127.0.0.1:8080` dans le navigateur. Pour Codex, garder le
    processus dans une session persistante. Ctrl+C ferme les processus que le
@@ -70,3 +72,11 @@ peut être analysé hors séance si ses observations sont récentes.
 
 La branche macOS du lanceur doit être validée sur le Mac : les tests exécutés
 sur le serveur Linux ne démontrent pas une installation macOS réussie.
+
+## Recherche multi-horizons optionnelle
+
+Voir [docs/MULTI_HORIZON.md](docs/MULTI_HORIZON.md). Les dépendances ML sont
+optionnelles et doivent être installées explicitement dans un environnement
+Python 3.11–3.13 distinct. Sur Apple Silicon, LightGBM peut nécessiter
+`brew install libomp`. Les tests natifs ont été exécutés sur Linux, pas sur ce Mac.
+Aucune installation ML ou de modèle ne se déclenche à l’ouverture du dashboard.

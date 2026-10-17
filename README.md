@@ -1,5 +1,9 @@
 # Trad : marchés connectés, analyse IA et simulation
 
+**Recherche multi-horizons expérimentale : [contrats, commandes et limites](docs/MULTI_HORIZON.md).**
+Les paramètres nouveaux sont désactivés ; aucune exécution Paper multi-horizons
+n’est implémentée dans ce checkout. Vue de lecture : `/strategies`.
+
 **Installation sur Mac M5 / Apple Silicon : [instructions pour Codex local](MACOS.md).**
 Lancer `bash scripts/start_macos.sh` après installation de Python et Ollama.
 
@@ -9,7 +13,7 @@ Un mode **consultatif connecté** récupère AAPL, MSFT et BTC/USD via Alpaca, p
 bash scripts/start_local.sh --port 8080
 ```
 
-Voir [LOCAL_MODEL.md](LOCAL_MODEL.md) pour installer et démarrer le modèle local, et [CONNECTED.md](CONNECTED.md) pour les données Alpaca et l’option Hugging Face. Les accès marché fonctionnent ; Ollama est installé, mais le registre est accessible mais le téléchargement du modèle reste bloqué sur un domaine de stockage distinct (voir LOCAL_MODEL.md). Le simulateur décrit ci-dessous garde son fonctionnement hors ligne.
+Voir [LOCAL_MODEL.md](LOCAL_MODEL.md) pour installer et démarrer le modèle local, et [CONNECTED.md](CONNECTED.md) pour les données Alpaca et l’option Hugging Face. Les vérifications historiques des accès marché et du modèle sont décrites dans LOCAL_MODEL.md ; elles ne garantissent pas l’état de la session courante. Le simulateur décrit ci-dessous garde son fonctionnement hors ligne.
 
 ## Socle de simulation hors ligne, actions et crypto
 
@@ -76,7 +80,7 @@ Les montants sont enregistrés en chaînes décimales, avec un contexte de calcu
 ## Limites importantes
 
 - Les noms ResearchAgent, SignalAgent, CriticAgent et RiskAgent du simulateur de base décrivent des règles déterministes. La couche IA distincte dispose de trois rôles consultatifs et d’un adaptateur OpenAI, testé avec un double de client. Le rejeu inclus contient de vraies réponses de modèles enregistrées, mais ne réalise pas de nouvelle inférence. Aucune connexion API LLM authentifiée n’a été validée par le programme Python.
-- **Aucune connexion Alpaca**, aucune authentification, aucune lecture de compte, aucun ordre Paper distant, aucun ordre réel. `prepare_payload` ne prouve pas qu'un courtier accepterait un ordre : pas de vérification des pas de cotation, fractions disponibles ou règles de titre.
+- **Dans le simulateur hors ligne : aucune connexion Alpaca**, aucune authentification, aucune lecture de compte, aucun ordre Paper distant, aucun ordre réel. Le parcours connecté séparé consulte les marchés et l’horloge Paper. `prepare_payload` ne prouve pas qu'un courtier accepterait un ordre : pas de vérification des pas de cotation, fractions disponibles ou règles de titre.
 - Le simulateur emploie des prix avec glissement; le dictionnaire Alpaca illustratif décrit un ordre limite au prix de référence. Ce sont deux mécanismes distincts sans garantie d'équivalence.
 - Les étiquettes intraday/swing correspondent uniquement à deux fenêtres de calcul (3 et 8 pas). Pas de clôture forcée de séance, jours fériés, horaires réels ou gestion robuste de positions sur plusieurs jours. Les cotations horaires inventées existent même hors séance.
 - Pas de forex, actualités, données historiques réelles, dividendes, splits, taxes, borrow fees, spread variable, carnet d'ordres, liquidité, latence, remplissage partiel, ordre en attente ou réconciliation courtier.

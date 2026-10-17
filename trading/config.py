@@ -64,3 +64,50 @@ class Config:
             if isinstance(getattr(default, name), Decimal):
                 raw[name] = decimal(raw[name])
         return cls(**raw)
+
+
+@dataclass(frozen=True)
+class MultiHorizonConfig:
+    """Separate research configuration: never changes legacy Ledger fingerprints."""
+    enabled: bool = False
+    paper_only: bool = True
+    minute_enabled: bool = False
+    swing_enabled: bool = False
+    portfolio_enabled: bool = False
+    routing_enabled: bool = False
+    analyst_model: str = 'qwen3:8b'
+    critic_model: str = 'qwen3:14b'
+    synthesizer_model: str = 'qwen3:8b'
+    minute_budget: Decimal = D('15')
+    swing_budget: Decimal = D('15')
+    portfolio_budget: Decimal = D('20')
+
+    def __post_init__(self):
+        from .signals import identifier
+        for key in ('enabled','paper_only','minute_enabled','swing_enabled','portfolio_enabled','routing_enabled'):
+            if type(getattr(self,key)) is not bool:
+                raise ValueError('Boolean configuration required')
+        if not self.paper_only:
+            raise ValueError('Only paper-only research is supported')
+        budgets=[]
+        for key in ('minute_budget','swing_budget','portfolio_budget'):
+            value=decimal(getattr(self,key))
+            if not 0<=value<=50:raise ValueError('Invalid suballocation')
+            object.__setattr__(self,key,value);budgets.append(value)
+        from decimal import localcontext
+        from .models import ACCOUNTING_CONTEXT
+        with localcontext(ACCOUNTING_CONTEXT):
+            if sum(budgets)>50:raise ValueError('Suballocations exceed global 50 USD ceiling')
+        for key in ('analyst_model','critic_model','synthesizer_model'):
+            identifier(getattr(self,key))
+
+    @classmethod
+    def load(cls,path):
+        from .ai_validation import strict_json
+        raw=strict_json(Path(path).read_text())
+        if type(raw) is not dict or set(raw)!={'multi_horizon'} or type(raw['multi_horizon']) is not dict:
+            raise ValueError('Expected separate multi_horizon object')
+        try:
+            return cls(**raw['multi_horizon'])
+        except TypeError:
+            raise ValueError('Unknown or invalid multi-horizon configuration fields') from None

@@ -24,7 +24,8 @@ function render(data) {
   const cfg = data.configuration;
   ready = cfg.ai_credentials && Boolean(cfg.ai_model);
   const provider = cfg.ai_provider === "ollama" ? `Ollama local : ${cfg.ai_ready ? "modèle installé" : "serveur ou modèle indisponible"}` : `Hugging Face : ${cfg.ai_credentials ? "clé présente" : "clé manquante"}`;
-  $("config").textContent = `Alpaca : ${cfg.market_credentials?"clés présentes":"clés manquantes"} · ${provider} · Modèle : ${cfg.ai_model || "à configurer"}`;
+  const modelLabel = cfg.role_models ? Object.entries(cfg.role_models).map(([role,model])=>`${role}: ${model}`).join(" / ") : cfg.ai_model;
+  $("config").textContent = `Alpaca : ${cfg.market_credentials?"clés présentes":"clés manquantes"} · ${provider} · Modèle : ${modelLabel || "à configurer"}`;
   $("markets").replaceChildren();
   for (const asset of data.market.assets) {
     const card = node("article", undefined, "card"); card.append(node("h3", asset.symbol), node("p", labels[asset.status] || asset.status, asset.status));

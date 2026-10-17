@@ -19,3 +19,16 @@ La simulation fonctionne sans réseau ; les données réelles exigent Alpaca.
 L’IA est consultative : conserver les validations et l’interdiction des ordres
 courtiers. Distinguer une abstention valide d’un échec fournisseur et ne pas
 annoncer d’inférence réelle sans l’avoir observée.
+
+## Développement multi-horizons
+
+Lire `docs/MULTI_HORIZON.md` avant de continuer les stratégies. Garder les nouveaux
+paramètres désactivés par défaut, les sous-budgets sous 50 USD au total, 45 USD
+par achat et une seule position. Le simulateur historique conserve sa configuration
+séparée. Il n'y a pas de PaperEngine dans ce checkout : ne jamais présenter
+StrategyRouter comme un moteur d'exécution. La branche distante one-shot à
+1 000 USD est distincte et ne doit pas servir de substitution automatique.
+Les LLM ne reçoivent aucun broker, secret, fonction d'ordre ou pouvoir de modifier
+les contrôles. Aucun téléchargement de poids automatique au démarrage.
+Les dépendances ML optionnelles sont installées explicitement ; les tests natifs
+sont ignorés en leur absence, ce qui doit être indiqué dans tout bilan.

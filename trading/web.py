@@ -4,17 +4,25 @@ from __future__ import annotations
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import secrets
 import threading
 import time
 
 from .connected import AlpacaMarket, ConnectedError, analyze, configuration_status
+from .strategy_status import StrategyStatus
+from .config import MultiHorizonConfig
 
 
 class Dashboard:
-    def __init__(self, market=None, advisor=None):
+    def __init__(self, market=None, advisor=None, strategies=None):
         self.market = market or AlpacaMarket()
+        if strategies is None:
+            cfg_path = os.environ.get("TRAD_MULTI_HORIZON_CONFIG")
+            cfg = MultiHorizonConfig.load(cfg_path) if cfg_path else MultiHorizonConfig()
+            strategies = StrategyStatus(cfg, os.environ.get("TRAD_RESEARCH_DIRECTORY", "outputs/multi-horizon"))
+        self.strategies = strategies
         self.advisor = advisor or analyze
         self.lock = threading.Lock()
         self.snapshot = None
@@ -70,12 +78,16 @@ def make_server(port=8080, dashboard=None):
                 self.reply(403, {"error": "Hôte refusé"})
                 return
             assets = {"/": ("index.html", "text/html; charset=utf-8"),
+                      "/strategies": ("strategies.html", "text/html; charset=utf-8"),
+                      "/strategies.js": ("strategies.js", "text/javascript; charset=utf-8"),
                       "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                       "/style.css": ("style.css", "text/css; charset=utf-8")}
             if self.path in assets:
                 name, kind = assets[self.path]
                 text = (Path(__file__).parent / "static" / name).read_text(encoding="utf-8")
                 self.reply(200, text.replace("__CSRF_TOKEN__", state.token), kind)
+            elif self.path == "/api/strategies":
+                self.run_locked(state.strategies.read)
             elif self.path == "/api/health":
                 self.reply(200, {"status": "ok", "configuration": configuration_status()})
             elif self.path == "/api/market":

@@ -43,7 +43,9 @@ else:
 PY
 fi
 if ! python3 -c 'from trading.connected import configuration_status; raise SystemExit(0 if configuration_status()["ai_ready"] else 1)'; then
-    ollama pull "$TRAD_LOCAL_MODEL"
+    echo "Modèle absent. Télécharger explicitement : ollama pull $TRAD_LOCAL_MODEL" >&2
+    echo 'Puis relancer ce script. Aucun téléchargement automatique.' >&2
+    exit 1
 fi
 python3 -c 'from trading.connected import configuration_status; assert configuration_status()["ai_ready"], "Modèle local indisponible"'
 python3 -m unittest discover -s tests -q
